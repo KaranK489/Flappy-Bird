@@ -1,0 +1,688 @@
+FLAPPYBIRDAPP:
+
+
+
+package com.almasb.fxglgames.flappy;
+
+import com.almasb.fxgl.animation.Interpolators;
+import com.almasb.fxgl.app.GameApplication;
+import com.almasb.fxgl.app.GameSettings;
+import com.almasb.fxgl.entity.Entity;
+import com.almasb.fxgl.input.UserAction;
+import com.almasb.fxgl.input.virtual.VirtualButton;
+import com.almasb.fxgl.physics.BoundingShape;
+import com.almasb.fxgl.physics.HitBox;
+import javafx.scene.Group;
+import javafx.scene.input.KeyCode;
+import javafx.scene.paint.Color;
+import javafx.scene.shape.Rectangle;
+import javafx.scene.text.Font;
+import javafx.scene.text.Text;
+import javafx.util.Duration;
+import java.util.Map;
+import static com.almasb.fxgl.dsl.FXGL.*;
+import static com.almasb.fxglgames.flappy.EntityType.*;
+
+/**
+ * @author Almas Baimagambetov (almaslvl@gmail.com)
+ */
+
+public class FlappyBirdApp extends GameApplication {
+
+    //various variables used later in the program.
+    private PlayerComponent playerComponent;
+    private boolean requestNewGame = false;
+    int level = 1;
+    boolean firstTime = true;
+    boolean removeSlow = false;
+    boolean removeLife = false;
+    int lives = 0;
+
+    //initialize settings method.
+    @Override
+    protected void initSettings(GameSettings settings) {
+        //sets width, height, window name, and enables menus.
+        settings.setWidth(1600);
+        settings.setHeight(900);
+        settings.setTitle("Flappy Bird");
+        settings.setVersion("");
+        settings.setMainMenuEnabled(true);
+        settings.setGameMenuEnabled(true);
+    }
+
+    //initialize input method.
+    @Override
+    protected void initInput() {
+        //keycode to control bird jumping when up arrow key is pressed.
+        getInput().addAction(new UserAction("Jump") {
+            @Override
+            protected void onActionBegin() {
+                playerComponent.jump();
+            }
+        }, KeyCode.UP, VirtualButton.UP);
+
+    }
+
+    //initialize  game variables method.
+    @Override
+    protected void initGameVars(Map<String, Object> vars) {
+        //initializes stage color and score variables.
+        vars.put("stageColor", Color.GREEN);
+        vars.put("score", -2);
+    }
+
+    //initializes music.
+    @Override
+    protected void onPreInit() {
+        //loops music.
+        loopBGM("bgm.mp3");
+    }
+
+    //initializes game.
+    @Override
+    protected void initGame() {
+        //runs initialize background and player methods.
+        initBackground();
+        initPlayer();
+    }
+
+    //initialize physics method.
+    @Override
+    protected void initPhysics() {
+        //sets lifeImage to the life.png image.
+        var lifeImage = getAssetLoader().loadTexture("life.png");
+        //collision handler for the player and a wall/pillar.
+        onCollisionBegin(PLAYER, WALL, (player, wall) -> {
+            //shows game over if the player has 0 lives.
+            if (lives == 0) {
+                showGameOver(false);
+            //or if the player has collected a power up for a life, it will let the player go through the pillar but remove the life.
+            } else {
+                lives = 0;
+                lifeImage.setVisible(false);
+            }
+        });
+        //collision handler for the player and the finish line.
+        onCollisionBegin(PLAYER, FINISH, (player, finish) -> {
+            //runs show game over method, sets various variables to defaults to prepare for next level or end of game.
+            showGameOver(true);
+            firstTime = true;
+            lives = 0;
+            lifeImage.setVisible(false);
+        });
+        //collision handler for the player and the slow power up.
+        onCollisionBegin(PLAYER, SLOW, (player, slow) -> {
+            //runs method to edit speed of player and sets a boolean to true.
+            playerComponent.slowHit();
+            removeSlow = true;
+        });
+        //collision handler for the player and life power up.
+        onCollisionBegin(PLAYER, LIFE, (player, life) -> {
+            //changes various variables, and sets the image of the life/heart in the top left to show that the player has an extra life.
+            removeLife = true;
+            lives = 1;
+            lifeImage.setTranslateX(-360);
+            lifeImage.setTranslateY(-360);
+            lifeImage.setScaleX(.06);
+            lifeImage.setScaleY(.06);
+            addUINode(lifeImage);
+        });
+    }
+
+    //initialize UI method.
+    @Override
+    protected void initUI() {
+        //sets the text "Score" at a certain position, size, etc.
+        Text uiScore = new Text("");
+        uiScore.setFont(Font.font(50));
+        uiScore.setTranslateX(15);
+        uiScore.setTranslateY(210);
+        uiScore.fillProperty().set(Color.RED);
+        uiScore.textProperty().set("Score: ");
+        addUINode(uiScore);
+        //sets the text for the actual changing score at a certain position, size, etc.
+        Text uiScoreChanging = new Text("");
+        uiScoreChanging.setFont(Font.font(50));
+        uiScoreChanging.setTranslateX(165);
+        uiScoreChanging.setTranslateY(210);
+        uiScoreChanging.fillProperty().set(Color.RED);
+        uiScoreChanging.textProperty().bind(getip("score").asString());
+        addUINode(uiScoreChanging);
+        //sets the text for the changing level at a certain position, size, etc.
+        Text uiLevel = new Text("");
+        uiLevel.setFont(Font.font(50));
+        uiLevel.setTranslateX(15);
+        uiLevel.setTranslateY(130);
+        uiLevel.fillProperty().set(Color.RED);
+        uiLevel.textProperty().set("Level: " + level);
+        addUINode(uiLevel);
+        //enables dpad on bottom left of UI.
+        Group dpadView = getInput().createVirtualDpadView();
+        addUINode(dpadView, -60, 800);
+    }
+
+    //onUpdate method.
+    @Override
+    protected void onUpdate(double tpf) {
+        //if the game has just started (score starts at -2 since it adds 2 to score every time in the method, so the score shows at 0 at the start), and if the first time boolean is true.
+        if (getScore() == -2 && firstTime) {
+            //it displays the level in a message box, and sets first time boolean to false.
+            getDialogService().showMessageBox(("Level " + level), getGameController()::resumeEngine);
+            firstTime = false;
+        }
+        //increases score by 2 everytime.
+        inc("score", +2);
+        //starts new game and sets request new game to false if request new game is true.
+        if (requestNewGame) {
+            requestNewGame = false;
+            getGameController().startNewGame();
+        }
+    }
+
+    //initialize background method.
+    private void initBackground() {
+        //creates background rectangle
+        Rectangle rect = new Rectangle(getAppWidth(), getAppHeight(), Color.DEEPSKYBLUE);
+        //creates background as entity.
+        Entity bg = entityBuilder()
+            .view(rect)
+            .with("rect", rect)
+            .buildAndAttach();
+        //binds x and y properties to the viewport x and y properties.
+        bg.xProperty().bind(getGameScene().getViewport().xProperty());
+        bg.yProperty().bind(getGameScene().getViewport().yProperty());
+    }
+
+    //initialize player method.
+    private void initPlayer() {
+        //creates new player component.
+        playerComponent = new PlayerComponent();
+        //creates player entity, setting position, dimensions, etc.
+        Entity player = entityBuilder()
+            .at(300, 200)
+            .type(PLAYER)
+            .bbox(new HitBox(BoundingShape.box(70, 60)))
+            //sets the animation for the bird, resulting in it flapping its wings.
+            .view(texture("bird.png").toAnimatedTexture(2, Duration.seconds(0.5)).loop())
+            .collidable()
+            .with(playerComponent, new BuildingComponent())
+            .build();
+        //sets bounds for game scene view port.
+        getGameScene().getViewport().setBounds(0, 0, Integer.MAX_VALUE, getAppHeight());
+        getGameScene().getViewport().bindToEntity(player, getAppWidth() / 3, getAppHeight() / 2);
+        //spawns player.
+        spawnWithScale(player, Duration.seconds(0.86), Interpolators.BOUNCE.EASE_OUT());
+    }
+
+    //get score method.
+    public int getScore() {
+        //returns score.
+        return geti("score");
+    }
+
+    //show game over method.
+    public void showGameOver(boolean levelDone) {
+        //if the level is done,
+        if (levelDone) {
+            //if the level is not 3,
+            if (level != 3) {
+                //displays that the player has beat the level, and increases the level by 1.
+                getDialogService().showMessageBox("You beat level " + level + "!", getGameController()::startNewGame);
+                level++;
+            //else, if the level is 3,
+            } else {
+                //displays that the player has beat the game.
+                getDialogService().showMessageBox("You beat the game! Your Score: " + (geti("score")), getGameController()::gotoMainMenu);
+            }
+        //else, if the level isn't done,
+        } else {
+            //displays that the player died and should restart the level.
+            getDialogService().showMessageBox("You died. Your Score: " + (geti("score") + 2) + ". Try the level again!", getGameController()::startNewGame);
+        }
+    }
+
+    //main method.
+    public static void main(String[] args) {
+        //launches program.
+        launch(args);
+    }
+}
+
+
+
+
+MENU:
+
+
+
+package com.almasb.fxglgames.flappy;
+
+import com.almasb.fxgl.app.scene.FXGLMenu;
+import com.almasb.fxgl.app.scene.MenuType;
+import javafx.beans.binding.Bindings;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
+import javafx.scene.CacheHint;
+import javafx.scene.Node;
+import javafx.scene.Parent;
+import javafx.scene.effect.Bloom;
+import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
+import javafx.scene.shape.Line;
+import javafx.scene.shape.Rectangle;
+import static com.almasb.fxgl.dsl.FXGL.*;
+
+/**
+ * @author Almas Baimagambetov (almaslvl@gmail.com)
+ */
+
+//menu class, which creates the main menu and the in game pause menu
+public class Menu extends FXGLMenu {
+
+    //various variables used later on.
+    private VBox scoresRoot = new VBox(10);
+    private Node highScores;
+
+    //menu constructor, which essentially makes the menu and works out how it looks, the size, etc.
+    public Menu() {
+        super(MenuType.MAIN_MENU);
+
+        getContentRoot().getChildren().setAll(new Rectangle(getAppWidth(), getAppHeight()));
+
+        var title = getUIFactoryService().newText(getSettings().getTitle(), Color.WHITE, 46.0);
+        title.setStroke(Color.WHITESMOKE);
+        title.setStrokeWidth(1.5);
+        title.setEffect(new Bloom(0.6));
+        centerTextBind(title, getAppWidth() / 2.0, 200);
+
+        var version = getUIFactoryService().newText(getSettings().getVersion(), Color.WHITE, 22.0);
+        centerTextBind(version, getAppWidth() / 2.0, 220);
+
+        getContentRoot().getChildren().addAll(title, version);
+
+        var menuBox = new VBox(
+                5,
+                new MenuButton("New Game", () -> fireNewGame()),
+                new MenuButton("Exit", () -> fireExit())
+        );
+
+        menuBox.setAlignment(Pos.TOP_CENTER);
+        menuBox.setTranslateX(getAppWidth() / 2.0 - 125);
+        menuBox.setTranslateY(getAppHeight() / 2.0 + 125);
+
+        // useful for checking if nodes are properly centered
+        var centeringLine = new Line(getAppWidth() / 2.0, 0, getAppWidth() / 2.0, getAppHeight());
+        centeringLine.setStroke(Color.WHITE);
+
+        scoresRoot.setPadding(new Insets(10));
+        scoresRoot.setAlignment(Pos.TOP_LEFT);
+
+        StackPane hsRoot = new StackPane(new Rectangle(450, 250, Color.color(0, 0, 0.2, 0.8)), scoresRoot);
+        hsRoot.setAlignment(Pos.TOP_CENTER);
+        hsRoot.setCache(true);
+        hsRoot.setCacheHint(CacheHint.SPEED);
+        hsRoot.setTranslateX(getAppWidth());
+        hsRoot.setTranslateY(menuBox.getTranslateY());
+
+        highScores = hsRoot;
+
+        getContentRoot().getChildren().addAll(menuBox, hsRoot);
+    }
+
+    //menu button class, which works out clicking things in the menu.
+    private static class MenuButton extends Parent {
+        MenuButton(String name, Runnable action) {
+            var text = getUIFactoryService().newText(name, Color.WHITE, 36.0);
+            text.setStrokeWidth(1.5);
+            text.strokeProperty().bind(text.fillProperty());
+
+            text.fillProperty().bind(
+                    Bindings.when(hoverProperty())
+                            .then(Color.BLUE)
+                            .otherwise(Color.WHITE)
+            );
+
+            setOnMouseClicked(e -> action.run());
+
+            setPickOnBounds(true);
+
+            getChildren().add(text);
+        }
+    }
+}
+
+
+
+
+ENTITYTYPE:
+
+
+
+package com.almasb.fxglgames.flappy;
+
+/**
+ * @author Almas Baimagambetov (almaslvl@gmail.com)
+ */
+
+//entity type method.
+public enum EntityType {
+    //creates all entity types for various entities in the program.
+    PLAYER, WALL, FINISH, SLOW, LIFE;
+}
+
+
+
+PLAYERCOMPONENT:
+
+
+
+package com.almasb.fxglgames.flappy;
+
+import com.almasb.fxgl.core.math.Vec2;
+import com.almasb.fxgl.dsl.FXGL;
+import com.almasb.fxgl.entity.component.Component;
+import static com.almasb.fxgl.dsl.FXGL.*;
+
+/**
+ * @author Almas Baimagambetov (almaslvl@gmail.com)
+ */
+
+//player component class.
+public class PlayerComponent extends Component {
+    //sets various variables used later in the program.
+    private Vec2 acceleration = new Vec2(0, 0);
+    boolean firstTime = true;
+    boolean slow = false;
+    //onUpdate method.
+    @Override
+    public void onUpdate(double tpf) {
+        //if the level is 1,
+        if (FXGL.<FlappyBirdApp>getAppCast().level == 1) {
+            //if first time boolean is true,
+            if (firstTime){
+                //set the acceleration x to 3, and first time boolean to false.
+                acceleration.x = 3;
+                firstTime = false;
+            }
+            //if slow boolean is true,
+            if (slow){
+                //decrease acceleration x by 1, and set slow boolean to false,
+                acceleration.x -=1;
+                slow = false;
+            }
+            //multiply acceleration x by .05 and acceleration y by 10.
+            acceleration.x += tpf * 0.05;
+            acceleration.y += tpf * 10;
+        //else, if the level is 2,
+        } else if (FXGL.<FlappyBirdApp>getAppCast().level == 2){
+            //if first time boolean is true,
+            if (firstTime){
+                //set the acceleration x to 4, and first time boolean to false.
+                acceleration.x = 4;
+                firstTime = false;
+            }
+            //if slow boolean is true,
+            if (slow){
+                //decrease acceleration x by 1, and set slow boolean to false,
+                acceleration.x -=1;
+                slow = false;
+            }
+            //multiply acceleration x by .1 and acceleration y by 9.
+            acceleration.x += tpf * 0.1;
+            acceleration.y += tpf * 9;
+        //else, if the level is 3,
+        } else if (FXGL.<FlappyBirdApp>getAppCast().level == 3){
+            //if first time boolean is true,
+            if (firstTime){
+                //set the acceleration x to 5, and first time boolean to false.
+                acceleration.x = 5;
+                firstTime = false;
+            }
+            //if slow boolean is true,
+            if (slow){
+                //decrease acceleration x by 1, and set slow boolean to false,
+                acceleration.x -=1;
+                slow = false;
+            }
+            //multiply acceleration x by .15 and acceleration y by 8.
+            acceleration.x += tpf * 0.15;
+            acceleration.y += tpf * 8;
+        }
+        //prevents the bird from infinitely increasing y acceleration.
+        if (acceleration.y < -5)
+            acceleration.y = -5;
+        //prevents the bird from infinitely decreasing y acceleration.
+        if (acceleration.y > 5)
+            acceleration.y = 5;
+        //translates entities new acceleration values.
+        entity.translate(acceleration.x, acceleration.y);
+        //if the entity goes below or above the app height,
+        if (entity.getBottomY() > getAppHeight() || entity.getY() < 0) {
+            //runs show game over function, since the person has failed the level.
+            FXGL.<FlappyBirdApp>getAppCast().showGameOver(false);
+        }
+    }
+
+    //jump method.
+    public void jump() {
+        //adds negative y acceleration to manage jump.
+        acceleration.addLocal(0, -5);
+        //plays sound effect to accompany jump.
+        play("jump.wav");
+    }
+
+    //slow hit method.
+    public void slowHit(){
+        //sets slow boolean to true.
+        slow = true;
+    }
+}
+
+
+
+
+BUILDINGCOMPONENT:
+
+
+
+package com.almasb.fxglgames.flappy;
+
+import com.almasb.fxgl.dsl.FXGL;
+import com.almasb.fxgl.entity.Entity;
+import com.almasb.fxgl.entity.component.Component;
+import com.almasb.fxgl.entity.components.CollidableComponent;
+import javafx.scene.shape.Rectangle;
+import static com.almasb.fxgl.dsl.FXGL.*;
+
+/**
+ * @author Almas Baimagambetov (almaslvl@gmail.com)
+ */
+
+//building component class.
+public class BuildingComponent extends Component {
+
+    //various variables used later in the program.
+    private double lastWall = 1000;
+    private boolean runOnceSlow = true;
+    private boolean runOnceLife = true;
+    Entity slow;
+    Entity life;
+    private boolean buildStuff = true;
+
+    //onUpdate method.
+    @Override
+    public void onUpdate(double tpf) {
+        //sets level integer of this class to level integer from flappy bird app class.
+        int level = FXGL.<FlappyBirdApp>getAppCast().level;
+        //if build stuff boolean is true,
+        if (buildStuff) {
+            //if the level is 1,
+            if (level == 1) {
+                //runs build walls method to build 10 walls.
+                buildWalls(10);
+                //creates finish line entity at the end with specific coordinates based on the level.
+                entityBuilder()
+                    .type(EntityType.FINISH)
+                    .at( 6500, 0)
+                    .scale(2,5)
+                    .viewWithBBox("finish.jpg")
+                    .with(new CollidableComponent(true))
+                    .buildAndAttach();
+            //else, if the level is 2,
+            } else if (level == 2) {
+                //runs build walls method to build 20 walls.
+                buildWalls(20);
+                //creates finish line entity at the end with specific coordinates based on the level.
+                entityBuilder()
+                    .type(EntityType.FINISH)
+                    .at( 11500, 0)
+                    .scale(2,5)
+                    .viewWithBBox("finish.jpg")
+                    .with(new CollidableComponent(true))
+                    .buildAndAttach();
+            //else, if the level is 3,
+            } else if (level == 3){
+                //runs build walls method to build 30 walls.
+                buildWalls(30);
+                //creates finish line entity at the end with specific coordinates based on the level.
+                entityBuilder()
+                    .type(EntityType.FINISH)
+                    .at( 16500, 0)
+                    .scale(2,5)
+                    .viewWithBBox("finish.jpg")
+                    .with(new CollidableComponent(true))
+                    .buildAndAttach();
+            }
+            //sets build stuff boolean to false.
+            buildStuff = false;
+        }
+        //if the remove slow boolean is true in the flappy bird app class,
+        if (FXGL.<FlappyBirdApp>getAppCast().removeSlow){
+            //sets the boolean to false and removes the slow power up from world, as it has been used by the player.
+            FXGL.<FlappyBirdApp>getAppCast().removeSlow = false;
+            slow.removeFromWorld();
+        }
+        //if the remove life boolean is true in the flappy bird app class,
+        if (FXGL.<FlappyBirdApp>getAppCast().removeLife){
+            //sets the boolean to false and removes the life power up from world, as it has been used by the player.
+            FXGL.<FlappyBirdApp>getAppCast().removeLife = false;
+            life.removeFromWorld();
+        }
+    }
+
+    //wallView method.
+    private Rectangle wallView(double width, double height) {
+        //creates rectangle and creates curves on the rectangle to make it look nicer.
+        Rectangle wall = new Rectangle(width, height);
+        wall.setArcWidth(15);
+        wall.setArcHeight(15);
+        wall.fillProperty().bind(FXGL.getWorldProperties().objectProperty("stageColor"));
+        return wall;
+    }
+
+    //build walls method.
+    private void buildWalls(int a) {
+        //various variables used later in the program.
+        int level = FXGL.<FlappyBirdApp>getAppCast().level;
+        double height = FXGL.getAppHeight();
+        double distance = height / 2;
+        int heightChanger = 0;
+        double scale = 0;
+        int randomNumSlow = 0;
+        int randomNumLife = 0;
+        //if the level is 1,
+        if (level == 1){
+            //sets various variables to specific values corresponding to the level.
+            heightChanger = 100;
+            scale = .3;
+            randomNumSlow = random(1,a);
+            boolean test = true;
+            //runs a loop to find position for life power up.
+            while (test){
+                randomNumLife =  random(1,a/2);
+                //this makes sure the power ups do not spawn in the same spot and clash with each other.
+                if (randomNumLife != randomNumSlow){
+                    test = false;
+                }
+            }
+        //else, if the level is 2,
+        } else if (level == 2){
+            //sets various variables to specific values corresponding to the level.
+            heightChanger = 150;
+            scale = .2;
+            randomNumSlow = random(1,a);
+            boolean test = true;
+            //runs a loop to find position for life power up.
+            while (test){
+                randomNumLife =  random(1,a/2);
+                //this makes sure the power ups do not spawn in the same spot and clash with each other.
+                if (randomNumLife != randomNumSlow){
+                    test = false;
+                }
+            }
+        //else, if the level is 3,
+        } else if (level == 3){
+            //sets various variables to specific values corresponding to the level.
+            heightChanger = 200;
+            scale = .1;
+            randomNumSlow = random(1,a);
+            boolean test = true;
+            //runs a loop to find position for life power up.
+            while (test){
+                randomNumLife =  random(1,a/2);
+                //this makes sure the power ups do not spawn in the same spot and clash with each other.
+                if (randomNumLife != randomNumSlow){
+                    test = false;
+                }
+            }
+        }
+        //loop that runs a times, which is the parameter passed in based on the level.
+        for (int i = 1; i <= a; i++) {
+            //sets top height double.
+            double topHeight = Math.random() * (height - distance);
+            //builds wall entity on the top.
+            entityBuilder()
+                .at(lastWall + i * 500, -25)
+                .type(EntityType.WALL)
+                .viewWithBBox(wallView(70, topHeight+heightChanger))
+                .with(new CollidableComponent(true))
+                .buildAndAttach();
+            //builds wall entity on the bottom, with the same y value as the previous wall built.
+            entityBuilder()
+                .at(lastWall + i * 500, topHeight + distance +25)
+                .type(EntityType.WALL)
+                .viewWithBBox(wallView(70, height - distance - topHeight))
+                .with(new CollidableComponent(true))
+                .buildAndAttach();
+            //if the slow power up integer is equal to i and the run once slow boolean is true.
+            if (randomNumSlow == i  && runOnceSlow){
+                //sets run once slow boolean to false.
+                runOnceSlow = false;
+                //creates slow power up entity, spawning in between the 2 pillars at the given random point.
+                slow = entityBuilder()
+                    .type(EntityType.SLOW)
+                    .at( (lastWall + i * 500)-230.5+40,  ((topHeight+heightChanger-25) + (((topHeight + distance+25) - (topHeight+heightChanger-25))/2))-124)
+                    .scale(scale, scale)
+                    .viewWithBBox("slow.png")
+                    .with(new CollidableComponent(true))
+                    .buildAndAttach();
+            }
+            //if the life power up integer is equal to i and the run once life boolean is true.
+            if (randomNumLife == i  && runOnceLife){
+                //sets run once life boolean to false.
+                runOnceLife = false;
+                //creates life power up entity, spawning in between the 2 pillars at the given random point.
+                life = entityBuilder()
+                    .type(EntityType.LIFE)
+                    .at( (lastWall + i * 500)-400+40,  ((topHeight+heightChanger-25) + (((topHeight + distance+25) - (topHeight+heightChanger-25))/2))-400)
+                    .scale(scale*0.3, scale*0.3)
+                    .viewWithBBox("life.png")
+                    .with(new CollidableComponent(true))
+                    .buildAndAttach();
+            }
+        }
+        //increases last wall integer by 5000.
+        lastWall += 10 * 500;
+    }
+}

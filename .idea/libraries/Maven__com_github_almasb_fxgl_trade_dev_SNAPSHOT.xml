@@ -1,0 +1,13 @@
+<component name="libraryTable">
+  <library name="Maven: com.github.almasb:fxgl-trade:dev-SNAPSHOT">
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/com/github/almasb/fxgl-trade/dev-SNAPSHOT/fxgl-trade-dev-20210314.134110-1576.jar!/" />
+    </CLASSES>
+    <JAVADOC>
+      <root url="jar://$MAVEN_REPOSITORY$/com/github/almasb/fxgl-trade/dev-SNAPSHOT/fxgl-trade-dev-20210314.134110-1576-javadoc.jar!/" />
+    </JAVADOC>
+    <SOURCES>
+      <root url="jar://$MAVEN_REPOSITORY$/com/github/almasb/fxgl-trade/dev-SNAPSHOT/fxgl-trade-dev-20210314.134110-1576-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>
